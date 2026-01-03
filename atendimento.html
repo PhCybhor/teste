@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Cybhor Tech | Admin Suporte</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --navy: #01257D; --electric: #00FFFF; }
+        body { background-color: #010d2e; color: white; font-family: 'Plus Jakarta Sans', sans-serif; height: 100vh; overflow: hidden; }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .unread { width: 10px; height: 10px; background: #ff3131; border-radius: 50%; box-shadow: 0 0 10px #ff3131; }
+        .priority-high { border-left: 5px solid #ff3131; background: rgba(255,49,49,0.05); }
+        .msg-admin { background: var(--electric); color: var(--navy); align-self: flex-end; border-radius: 15px 15px 0 15px; }
+        .msg-cliente { background: rgba(255, 255, 255, 0.05); align-self: flex-start; border-radius: 0 15px 15px 15px; border: 1px solid rgba(255,255,255,0.1); }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row">
+
+    <div id="admin-lock" class="fixed inset-0 z-[100] bg-[#010d2e] flex items-center justify-center p-4">
+        <div class="glass p-8 rounded-3xl w-full max-w-sm border-electric/20 text-center">
+            <div class="w-12 h-12 bg-electric/20 rounded-xl flex items-center justify-center mx-auto mb-6">
+                <span class="text-electric font-black">CT</span>
+            </div>
+            <h2 class="text-xl font-bold mb-6 italic">Acesso Administrativo</h2>
+            <input type="email" id="admin-email" placeholder="E-mail do Admin" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 mb-3 outline-none focus:border-electric">
+            <input type="password" id="admin-password" placeholder="Senha" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 mb-6 outline-none focus:border-electric">
+            <button id="btn-login-admin" class="w-full bg-electric text-navy font-extrabold py-4 rounded-xl hover:scale-105 transition shadow-lg shadow-electric/20">ENTRAR NO PAINEL</button>
+            <p id="error-msg" class="text-red-500 text-[10px] mt-4 font-bold uppercase tracking-widest hidden"></p>
+        </div>
+    </div>
+
+    <div id="admin-content" class="hidden flex flex-col md:flex-row w-full h-full">
+        <aside class="w-full md:w-80 glass border-r border-white/10 flex flex-col">
+            <div class="p-6 border-b border-white/10 flex justify-between items-center">
+                <span class="font-black text-sm tracking-widest text-electric">CYBHOR CRM</span>
+                <button onclick="logout()" class="text-[9px] opacity-40 hover:opacity-100">SAIR</button>
+            </div>
+            <div id="user-list" class="flex-1 overflow-y-auto">
+                </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col relative">
+            <div class="p-4 glass border-b border-white/10 flex justify-between items-center">
+                <div>
+                    <h3 id="current-name" class="font-bold text-sm">Selecione um cliente</h3>
+                    <p id="current-cpf" class="text-[10px] opacity-40">---</p>
+                </div>
+                <div id="priority-btns" class="hidden flex gap-2">
+                    <button onclick="setPrioridade('alta')" class="bg-red-500/20 text-red-500 text-[9px] font-bold px-3 py-1 rounded border border-red-500/30">URGENTE</button>
+                    <button onclick="setPrioridade('baixa')" class="bg-white/5 text-white text-[9px] font-bold px-3 py-1 rounded border border-white/10">NORMAL</button>
+                </div>
+            </div>
+
+            <div id="chat-flow" class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+                </div>
+
+            <form id="admin-send-form" class="p-4 glass border-t border-white/10 flex gap-2">
+                <input type="text" id="admin-msg" placeholder="Resposta oficial da Cybhor..." class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-electric">
+                <button class="bg-electric text-navy px-6 rounded-xl font-bold text-xs uppercase">Responder</button>
+            </form>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getDatabase, ref, onValue, push, update } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-database.js";
+
+        const firebaseConfig = {
+    apiKey: "AIzaSyB_4aAZBxQbdAH5BsWnIk9-5-zSr0hwHc4",
+    authDomain: "cybhor-b650a.firebaseapp.com",
+    databaseURL: "https://cybhor-b650a-default-rtdb.firebaseio.com",
+    projectId: "cybhor-b650a",
+    storageBucket: "cybhor-b650a.firebasestorage.app",
+    messagingSenderId: "737331307662",
+    appId: "1:737331307662:web:ebe1ec62c2d7a819c615df",
+    measurementId: "G-NVWX7SRPS6"
+  };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+        let activeId = null;
+
+        // Login Admin
+        document.getElementById('btn-login-admin').onclick = () => {
+            const e = document.getElementById('admin-email').value;
+            const p = document.getElementById('admin-password').value;
+            signInWithEmailAndPassword(auth, e, p).catch(() => {
+                document.getElementById('error-msg').innerText = "CREDENCIAIS INVÁLIDAS";
+                document.getElementById('error-msg').classList.remove('hidden');
+            });
+        };
+
+        window.logout = () => signOut(auth);
+
+        // Verificação de Estado
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('admin-lock').classList.add('hidden');
+                document.getElementById('admin-content').classList.remove('hidden');
+                carregarUsuarios();
+            } else {
+                document.getElementById('admin-lock').classList.remove('hidden');
+                document.getElementById('admin-content').classList.add('hidden');
+            }
+        });
+
+        // Monitorar Usuarios
+        function carregarUsuarios() {
+            onValue(ref(db, 'users'), (snap) => {
+                const list = document.getElementById('user-list');
+                list.innerHTML = "";
+                snap.forEach(u => {
+                    const v = u.val();
+                    const id = u.key;
+                    const div = document.createElement('div');
+                    div.className = `p-4 border-b border-white/5 cursor-pointer flex justify-between items-center ${v.prioridade === 'alta' ? 'priority-high' : ''}`;
+                    div.innerHTML = `<div><p class="font-bold text-xs">${v.email}</p><p class="text-[9px] opacity-30">CPF: ${v.cpf}</p></div>
+                    ${v.status === 'pendente' ? '<div class="unread"></div>' : ''}`;
+                    div.onclick = () => abrirChat(id, v.email, v.cpf);
+                    list.appendChild(div);
+                });
+            });
+        }
+
+        function abrirChat(id, email, cpf) {
+            activeId = id;
+            document.getElementById('current-name').innerText = email;
+            document.getElementById('current-cpf').innerText = `CPF: ${cpf}`;
+            document.getElementById('priority-btns').classList.remove('hidden');
+            update(ref(db, `users/${id}`), { status: 'respondido' });
+
+            onValue(ref(db, `mensagens/${id}`), (snap) => {
+                const flow = document.getElementById('chat-flow');
+                flow.innerHTML = "";
+                snap.forEach(m => {
+                    const data = m.val();
+                    const d = document.createElement('div');
+                    d.className = data.tipo === 'admin' ? 'msg-admin p-3 max-w-[80%]' : 'msg-cliente p-3 max-w-[80%]';
+                    d.innerHTML = `<p class="text-[8px] opacity-30 mb-1 uppercase font-black">${data.tipo}</p><p class="text-xs">${data.texto}</p>`;
+                    flow.appendChild(d);
+                });
+                flow.scrollTop = flow.scrollHeight;
+            });
+        }
+
+        window.setPrioridade = (p) => { if(activeId) update(ref(db, `users/${activeId}`), { prioridade: p }); };
+
+        document.getElementById('admin-send-form').onsubmit = (e) => {
+            e.preventDefault();
+            const input = document.getElementById('admin-msg');
+            if(!activeId || !input.value.trim()) return;
+            push(ref(db, `mensagens/${activeId}`), { texto: input.value, tipo: 'admin', hora: new Date().toLocaleTimeString() });
+            input.value = "";
+        };
+    </script>
+</body>
+</html>
